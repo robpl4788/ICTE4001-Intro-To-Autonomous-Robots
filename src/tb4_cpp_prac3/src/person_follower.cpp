@@ -109,7 +109,7 @@ void PersonFollower::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr 
     auto ranges = scan_msg->ranges;
     auto intensities = scan_msg->intensities;
 
-    auto measurements_count = ranges.size();
+    int measurements_count = ranges.size();
 
     float min_range_measurement = std::numeric_limits<float>::infinity();
     int min_range_measurement_index = -1;
@@ -138,8 +138,11 @@ void PersonFollower::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr 
     }
 
     float min_range_measurement_angle = angle_min + min_range_measurement_index * angle_increment;
-    RCLCPP_INFO(this->get_logger(), "Closest object at range: %.2f m, angle: %.2f rad", min_range_measurement_angle, min_angle);
-/*
+    RCLCPP_INFO(this->get_logger(), "Closest object at range: %.2f m, angle: %.2f rad", min_range_measurement_angle, min_range_measurement_angle);
+    if (min_range_measurement_angle < angle_min || min_range_measurement_angle > angle_max) {
+      RCLCPP_WARN(this->get_logger(), "Calculated angle is outside of the allowed sensor range.");
+    }
+    /*
     MILESTONE #3.3. Write a Person Follow Reactive Control that takes the bearing and range information of the closest 
     object in the environment as the input and publish a message on topic /cmd_vel to control the motion of
     the robot. 
@@ -147,10 +150,9 @@ void PersonFollower::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr 
 
   geometry_msgs::msg::Twist cmd_vel;
 
-  cmd_vel.linear.set__x(goal->max_translation_speed);
 
-  cmd_vel.angular.z = angle_control_gain_*(min_angle - following_angle_);
-  cmd_vel.linear.x = following_distance_control_gain_*(min_range_measurement - following_distance_);
+  cmd_vel.angular.z = following_angle_gain_*(min_range_measurement_angle - following_angle_);
+  cmd_vel.linear.x = following_distance_gain_*(min_range_measurement - following_distance_);
   
   if (cmd_vel.linear.x < 0.0) {
     cmd_vel.linear.x = 0.0;
