@@ -24,7 +24,7 @@ public:
 
       // Declare parameters
       this->declare_parameter<double>("following_distance", 1.0);
-      this->declare_parameter<double>("following_angle", 0.0);
+      this->declare_parameter<double>("following_angle", -1.5);
 
       this->declare_parameter<double>("following_distance_gain", 1.0);
       this->declare_parameter<double>("following_angle_gain", 1.0);
@@ -122,7 +122,7 @@ void PersonFollower::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr 
         }
       }
     }
-
+    RCLCPP_INFO(this->get_logger(), "min range: %.2f", min_range_measurement);
     
     /*
     MILESTONE #3.2. You have to calculate the bearing and the range of the closest object with respect to the robot frame. You have
@@ -138,7 +138,7 @@ void PersonFollower::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr 
     }
 
     float min_range_measurement_angle = angle_min + min_range_measurement_index * angle_increment;
-    RCLCPP_INFO(this->get_logger(), "Closest object at range: %.2f m, angle: %.2f rad", min_range_measurement_angle, min_range_measurement_angle);
+    RCLCPP_INFO(this->get_logger(), "Closest object at range: %.2f m, angle: %.2f rad", min_range_measurement, min_range_measurement_angle);
     if (min_range_measurement_angle < angle_min || min_range_measurement_angle > angle_max) {
       RCLCPP_WARN(this->get_logger(), "Calculated angle is outside of the allowed sensor range.");
     }
