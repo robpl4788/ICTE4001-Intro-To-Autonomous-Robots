@@ -23,7 +23,7 @@ public:
       */
 
       // Declare parameters
-      this->declare_parameter<double>("following_distance", 1.0);
+      this->declare_parameter<double>("following_distance", .5);
       this->declare_parameter<double>("following_angle", -1.5);
 
       this->declare_parameter<double>("following_distance_gain", 1.0);
@@ -150,8 +150,19 @@ void PersonFollower::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr 
 
   geometry_msgs::msg::Twist cmd_vel;
 
+  double angle_error = min_range_measurement_angle - following_angle_;
 
-  cmd_vel.angular.z = following_angle_gain_*(min_range_measurement_angle - following_angle_);
+  // Handle wrapping
+  while (angle_error < -PI) {
+    angle_error += 2 * PI;
+  }
+
+  while (angle_error > PI) {
+    angle_error -= 2 * PI;
+  }
+
+
+  cmd_vel.angular.z = following_angle_gain_*(angle_error);
   cmd_vel.linear.x = following_distance_gain_*(min_range_measurement - following_distance_);
   
   if (cmd_vel.linear.x < 0.0) {
