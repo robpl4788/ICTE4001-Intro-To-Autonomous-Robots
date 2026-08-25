@@ -30,8 +30,8 @@ public:
         this->declare_parameter<double>("buffer_zone", 1.0);
         this->declare_parameter<double>("forward_velocity", 0.2);
 
-        this->declare_parameter<double>("angle_control_gain_1", 2.0);
-        this->declare_parameter<double>("angle_control_gain_2", 2.0);
+        this->declare_parameter<double>("angle_control_gain_1", 1.0);
+        this->declare_parameter<double>("angle_control_gain_2", 4.0);
 
         // Get parameter values
         this->get_parameter("following_distance", following_distance_);
@@ -95,8 +95,8 @@ private:
     int64_t wall_side_;
     double buffer_zone_;
     double forward_velocity_;
-    double angle_control_gain_1_;
-    double angle_control_gain_2_;
+    double angle_control_gain_1_; // 1.0
+    double angle_control_gain_2_; // 4.0
     double distance_control_gain_;
 };
 
@@ -195,15 +195,15 @@ void WallFollower::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr sc
     
     if (wall_side_ == 1) {
         if (abs(wall_angle) > PI / 10) {
-            cmd_vel.angular.z = angle_control_gain_1_ * wall_angle + angle_control_gain_2_ * wall_distance_error * sin(wall_angle) / wall_angle;
-        } else {
-            cmd_vel.angular.z = angle_control_gain_1_ * wall_angle + angle_control_gain_2_ * wall_distance_error;
-        }
-    } else {
-        if (abs(wall_angle) > PI / 10) {
             cmd_vel.angular.z = angle_control_gain_1_ * wall_angle - angle_control_gain_2_ * wall_distance_error * sin(wall_angle) / wall_angle;
         } else {
             cmd_vel.angular.z = angle_control_gain_1_ * wall_angle - angle_control_gain_2_ * wall_distance_error;
+        }
+    } else {
+        if (abs(wall_angle) > PI / 10) {
+            cmd_vel.angular.z = angle_control_gain_1_ * wall_angle + angle_control_gain_2_ * wall_distance_error * sin(wall_angle) / wall_angle;
+        } else {
+            cmd_vel.angular.z = angle_control_gain_1_ * wall_angle + angle_control_gain_2_ * wall_distance_error;
         }
     }
 
@@ -292,7 +292,7 @@ WallFollower::dynamicParametersCallback(std::vector<rclcpp::Parameter> parameter
         if (param_type == ParameterType::PARAMETER_INTEGER) {
             if (param_name == "wall_side") {
                 wall_side_ = parameter.as_int();
-                if(wall_side_ == 1 || wall_side_ == -1)
+                if(wall_side_ != 1 || wall_side_ != -1)
                 {
                     RCLCPP_WARN(this->get_logger(), "You've set wall_side to neither -1, or 1"
                     " this isn't allowed, so the side will be set to be 1.");
