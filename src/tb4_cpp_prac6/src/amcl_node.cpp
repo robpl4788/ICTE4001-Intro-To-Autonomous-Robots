@@ -1608,8 +1608,8 @@ AmclNode::pf_resample(pf_t * pf){
       /* TODO TASK - MILESTONE # 4.2
         Generate samples based on weight 
       */
-      double r = drand48() * cd_old_set[old_particle_set->sample_count + 1];
-      for (int s = 0; s < old_particle_set->sample_count + 1; s++) {
+      double r = drand48() * cd_old_set[old_particle_set->sample_count];
+      for (int s = 0; s < old_particle_set->sample_count; s++) {
         if (r < cd_old_set[s + 1]) {
           sample_in_old_set = &old_particle_set->samples[s];
           sample_in_new_set->pose = sample_in_old_set->pose;
