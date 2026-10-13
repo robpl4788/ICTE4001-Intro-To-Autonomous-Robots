@@ -11,6 +11,8 @@ ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py world:=off
 
 # Faster Sim
 ros2 launch diff_drive_robot_gz_sim ICTE4001_MRobot.launch.py world:=office_world 
- - Close this rviz file, it's slightly weird
 ros2 launch turtlebot4_viz view_robot.launch.py
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
+
+# To run GMap
+ros2 run gmapper gmap --ros-args -p use_sim_time:=true

@@ -46,15 +46,6 @@ def generate_launch_description():
         launch_arguments=[('gz_args', [LaunchConfiguration('world'), '.sdf', ' -r', ' -v 4'])]
     )
 
-    # rviz_config_file = os.path.join(pkg_diff_drive_robot_gz_sim, 'rviz', 'view_robot_sensor.rviz')
-    rviz_config_file = os.path.join(pkg_diff_drive_robot_gz_sim, 'rviz', 'view_robot_mapping_and_navigation.rviz')
-    rviz = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=['-d', rviz_config_file]
-    )
 
     spawn_robot = Node(
        package='ros_gz_sim', 
@@ -106,7 +97,6 @@ def generate_launch_description():
     ld.add_action(spawn_robot)
     ld.add_action(joint_state_broadcaster_spawner)
     ld.add_action(diffdrive_controller_callback)
-    ld.add_action(rviz)
     ld.add_action(ros_ign_bridge)
 
     return ld
