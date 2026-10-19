@@ -124,61 +124,37 @@ The following parameters are used in this ROS 2 implementation:
 - **`~/delta`** *(double)*: Size of one map pixel (in meters).  
 
 
-## How to Use TurtleBot3 Simulation in Gazebo
+## How to Use Gmapping with Nav2
 
-To visualize the mapping process using this **ROS 2** implementation, you can simulate **TurtleBot3** in **Gazebo**. Below is a step-by-step guide to set up and use the simulation environment:
+To map and navigate with the ICTE4001 robot, start the simulator and then run the Gmapping launch file. It starts Gmapping, Nav2, and the configured RViz session.
 
 ### Prerequisites
 Ensure that you have installed the following:
-- **ROS 2** (Humble/Foxy, or other supported versions).
-- **Gazebo** for simulation.
-- **TurtleBot3** packages (`turtlebot3`, `turtlebot3_simulations`).
+- **ROS 2 Humble**, Gazebo, and this workspace built with `colcon`.
+- The Nav2 packages, including `nav2_bringup`.
 
-### Step 1: Set Up Environment Variables
-To begin, export the environment variables for **TurtleBot3** . In your terminal, run:
-
+### Step 1: Source the ROS Environment
+In each terminal, source ROS 2 and this workspace:
 ```sh
-export TURTLEBOT3_MODEL=burger    
+source /opt/ros/humble/setup.bash
+source <workspace>/install/setup.bash
 ```
-This sets the **TurtleBot3** model to **Burger**. You can change it to **waffle** or **waffle_pi** if desired.
 
 ### Step 2: Launch Gazebo Simulation
-To launch the **TurtleBot3** simulation in **Gazebo**, run:
+To launch the ICTE4001 robot in the office world, run:
 ```sh
-ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
+ros2 launch diff_drive_robot_gz_sim ICTE4001_MRobot.launch.py world:=office_world
 ```
-This command will launch the **Gazebo** environment with **TurtleBot3** placed in a predefined world.
+This starts the simulator, robot controllers, and sensor bridges.
 
 ### Step 3: Launch SLAM Node
-In a new terminal, launch the **Gmapping** SLAM node from this repository:
+In another terminal, launch **Gmapping**, **Nav2**, and **RViz**:
 ```sh
-ros2 run gmapper gmap  
+ros2 launch gmapper gmap.launch.py
 ```
-Ensure that the **TurtleBot3** and **Gmapping** nodes are communicating over the same ROS 2 network.
+This starts Gmapping, Nav2, and the Gmapping RViz configuration.
 
-### Step 4: Visualize in RViz
-To visualize the robot and mapping process, launch **RViz**:
-```sh
-ros2 launch turtlebot3_bringup rviz2.launch.py
-```
-In **RViz**, make sure to add the **/map** topic to visualize the occupancy grid and the **/particles** topic to see the particles. You should see **TurtleBot3** navigating and creating a map of the environment in real-time, with particles being displayed to illustrate the localization uncertainty.
-
-### Step 5: Control the Robot
-You can control the robot using **teleop** or an autonomous navigation script:
-```sh
-ros2 run turtlebot3_teleop teleop_keyboard
-```
-Use the keyboard commands to drive the robot around and watch as the **RBPF** builds a map and tracks the robot's pose.
-
-
-or insetead of doing all the steps manually, you can use the following bash script to run all the nodes at the same time. 
-
-```sh
-cd <your workspace/src/ros2_gmapping
-chmod +x mapping.sh
-./mapping.sh
-```
-
-
+### Step 4: Set a Navigation Goal
+In RViz, select **Nav2 Goal** and click-drag on the map to set a goal position and heading. Nav2 plans against Gmapping's live `/map`, uses `/scan` for obstacle avoidance, and sends velocity commands to the simulator.
 
 Feel free to explore, modify, and extend this implementation for your SLAM projects!

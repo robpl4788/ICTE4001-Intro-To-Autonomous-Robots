@@ -12,6 +12,9 @@
   <depend>geometry_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>openslam_gmapping</depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>nav2_rviz_plugins</exec_depend>
+  <exec_depend>rviz2</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
