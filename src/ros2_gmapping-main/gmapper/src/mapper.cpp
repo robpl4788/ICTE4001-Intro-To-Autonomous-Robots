@@ -26,12 +26,13 @@ SlamGmapping::SlamGmapping():
 }
 
 void SlamGmapping::init() {
-    gsp_ = new GMapping::GridSlamProcessor();
+    gsp_ = nullptr;
 
     gsp_laser_ = nullptr;
     gsp_odom_ = nullptr;
     got_first_scan_ = false;
     got_map_ = false;
+    has_pending_initial_pose_ = false;
 
     throttle_scans_ = 1;
     base_frame_ = "base_link";
@@ -76,6 +77,11 @@ void SlamGmapping::startLiveSlam() {
     entropy_publisher_ = this->create_publisher<std_msgs::msg::Float64>("entropy", rclcpp::SystemDefaultsQoS());
     sst_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map", rclcpp::SystemDefaultsQoS());
     sstm_ = this->create_publisher<nav_msgs::msg::MapMetaData>("map_metadata", rclcpp::SystemDefaultsQoS());
+    particle_cloud_publisher_ = this->create_publisher<nav2_msgs::msg::ParticleCloud>(
+        "particle_cloud", rclcpp::SystemDefaultsQoS());
+    initial_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+        "initialpose", rclcpp::SystemDefaultsQoS(),
+        std::bind(&SlamGmapping::initialPoseCallback, this, std::placeholders::_1));
     scan_filter_sub_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>
             (node_, "scan", rclcpp::SensorDataQoS().get_rmw_qos_profile());
 //    sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -236,20 +242,35 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::ConstSharedPtr 
     gsp_laser_ = new GMapping::RangeSensor("FLASER", gsp_laser_beam_count_, fabs(scan->angle_increment), gmap_pose,
                                            0.0, maxRange_);
 
-    GMapping::SensorMap smap;
-    smap.insert(make_pair(gsp_laser_->getName(), gsp_laser_));
-    gsp_->setSensorMap(smap);
-
     gsp_odom_ = new GMapping::OdometrySensor(odom_frame_);
 
-    /// @todo Expose setting an initial pose
     GMapping::OrientedPoint initialPose;
-    if(!getOdomPose(initialPose, scan->header.stamp))
+    if (has_pending_initial_pose_)
+    {
+        initialPose = pending_initial_pose_;
+        has_pending_initial_pose_ = false;
+    }
+    else if(!getOdomPose(initialPose, scan->header.stamp))
     {
         RCLCPP_WARN(this->get_logger(), "Unable to determine inital pose of laser! Starting point will be set to zero.");
         initialPose = GMapping::OrientedPoint(0.0, 0.0, 0.0);
     }
 
+    initializeGsp(initialPose);
+
+    RCLCPP_INFO(this->get_logger(), "Initialization complete");
+
+    return true;
+}
+
+void SlamGmapping::initializeGsp(const GMapping::OrientedPoint& initial_pose)
+{
+    delete gsp_;
+    gsp_ = new PosePreservingGridSlamProcessor();
+
+    GMapping::SensorMap sensor_map;
+    sensor_map.insert(make_pair(gsp_laser_->getName(), gsp_laser_));
+    gsp_->setSensorMap(sensor_map);
     gsp_->setMatchingParameters(maxUrange_, maxRange_, sigma_,
                                 kernelSize_, lstep_, astep_, iterations_,
                                 lsigma_, ogain_, static_cast<unsigned int>(lskip_));
@@ -259,7 +280,7 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::ConstSharedPtr 
     gsp_->setUpdatePeriod(temporalUpdate_);
     gsp_->setgenerateMap(false);
     gsp_->GridSlamProcessor::init(static_cast<unsigned int>(particles_), xmin_, ymin_, xmax_, ymax_,
-                                  delta_, initialPose);
+                                  delta_, initial_pose);
     gsp_->setllsamplerange(llsamplerange_);
     gsp_->setllsamplestep(llsamplestep_);
     /// @todo Check these calls; in the gmapping gui, they use
@@ -271,10 +292,46 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::ConstSharedPtr 
 
     // Call the sampling function once to set the seed.
     GMapping::sampleGaussian(1, static_cast<unsigned int>(seed_));
+}
 
-    RCLCPP_INFO(this->get_logger(), "Initialization complete");
+void SlamGmapping::initialPoseCallback(
+    const geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr pose)
+{
+    if (pose->header.frame_id.empty())
+    {
+        RCLCPP_WARN(this->get_logger(), "Ignoring initial pose with an empty frame id");
+        return;
+    }
 
-    return true;
+    geometry_msgs::msg::PoseStamped input_pose;
+    input_pose.header = pose->header;
+    input_pose.pose = pose->pose.pose;
+
+    geometry_msgs::msg::PoseStamped map_pose;
+    try
+    {
+        if (input_pose.header.frame_id == map_frame_)
+        {
+            map_pose = input_pose;
+        }
+        else
+        {
+            buffer_->transform(input_pose, map_pose, map_frame_, tf2::durationFromSec(1.0));
+        }
+    }
+    catch (const tf2::TransformException& e)
+    {
+        RCLCPP_WARN(this->get_logger(), "Unable to transform initial pose into %s: %s",
+                    map_frame_.c_str(), e.what());
+        return;
+    }
+
+    pending_initial_pose_ = GMapping::OrientedPoint(
+        map_pose.pose.position.x,
+        map_pose.pose.position.y,
+        tf2::getYaw(map_pose.pose.orientation));
+    has_pending_initial_pose_ = true;
+    RCLCPP_INFO(this->get_logger(), "Initial pose received; gmapping will reset on the next scan");
 }
 
 bool SlamGmapping::addScan(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan, GMapping::OrientedPoint& gmap_pose) {
@@ -338,11 +395,23 @@ void SlamGmapping::laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr sca
             return;
         got_first_scan_ = true;
     }
+    else if (has_pending_initial_pose_)
+    {
+        GMapping::OrientedPoint odometry_pose;
+        if (!getOdomPose(odometry_pose, scan->header.stamp))
+            return;
+
+        gsp_->setInitialPose(pending_initial_pose_, odometry_pose);
+        has_pending_initial_pose_ = false;
+        RCLCPP_INFO(this->get_logger(), "Applied initial pose while preserving the existing map");
+    }
 
     GMapping::OrientedPoint odom_pose;
 
     if(addScan(scan, odom_pose))
     {
+        publishParticleCloud(rclcpp::Time(scan->header.stamp));
+
         GMapping::OrientedPoint mpose = gsp_->getParticles()[gsp_->getBestParticleIndex()].pose;
 
         tf2::Quaternion q;
@@ -362,6 +431,36 @@ void SlamGmapping::laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr sca
             last_map_update = tf2_ros::fromMsg(scan->header.stamp);
         }
     }
+}
+
+void SlamGmapping::publishParticleCloud(const rclcpp::Time& stamp)
+{
+    nav2_msgs::msg::ParticleCloud cloud;
+    cloud.header.stamp = stamp;
+    cloud.header.frame_id = map_frame_;
+
+    const auto& particles = gsp_->getParticles();
+    double total_weight = 0.0;
+    for (const auto& particle : particles)
+    {
+        total_weight += particle.weight;
+    }
+
+    cloud.particles.reserve(particles.size());
+    for (const auto& particle : particles)
+    {
+        nav2_msgs::msg::Particle cloud_particle;
+        cloud_particle.pose.position.x = particle.pose.x;
+        cloud_particle.pose.position.y = particle.pose.y;
+        tf2::Quaternion orientation;
+        orientation.setRPY(0.0, 0.0, particle.pose.theta);
+        cloud_particle.pose.orientation = tf2::toMsg(orientation);
+        cloud_particle.weight = total_weight > 0.0 ?
+            particle.weight / total_weight : 1.0 / particles.size();
+        cloud.particles.push_back(std::move(cloud_particle));
+    }
+
+    particle_cloud_publisher_->publish(cloud);
 }
 
 double SlamGmapping::computePoseEntropy()

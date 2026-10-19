@@ -8,6 +8,8 @@ endif()
 # find dependencies
 
 find_package(ament_cmake REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
@@ -40,6 +42,8 @@ add_executable(gmap src/mapper.cpp)
 
 ament_target_dependencies(gmap
         rclcpp
+        geometry_msgs
+        nav2_msgs
         tf2
         tf2_ros
         message_filters
@@ -54,5 +58,7 @@ install(TARGETS gmap
 install(DIRECTORY launch
 	    DESTINATION share/${PROJECT_NAME})
 
-ament_package()
+install(DIRECTORY rviz
+        DESTINATION share/${PROJECT_NAME})
 
+ament_package()

@@ -13,7 +13,9 @@
 #include "nav_msgs/msg/map_meta_data.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "nav2_msgs/msg/particle_cloud.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/transform_broadcaster.h"
@@ -25,6 +27,25 @@
 #include "gmapping/sensor/sensor_base/sensor.h"
 #include "gmapping/sensor/sensor_range/rangesensor.h"
 #include "gmapping/sensor/sensor_odometry/odometrysensor.h"
+
+class PosePreservingGridSlamProcessor : public GMapping::GridSlamProcessor
+{
+public:
+    void setInitialPose(
+        const GMapping::OrientedPoint& pose,
+        const GMapping::OrientedPoint& odometry_pose)
+    {
+        for (auto& particle : m_particles)
+        {
+            particle.pose = pose;
+            particle.previousPose = pose;
+        }
+        m_odoPose = odometry_pose;
+        m_lastPartPose = odometry_pose;
+        m_linearDistance = 0.0;
+        m_angularDistance = 0.0;
+    }
+};
 
 class SlamGmapping : public rclcpp::Node{
 public:
@@ -42,6 +63,8 @@ private:
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr entropy_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr sst_;
     rclcpp::Publisher<nav_msgs::msg::MapMetaData>::SharedPtr sstm_;
+    rclcpp::Publisher<nav2_msgs::msg::ParticleCloud>::SharedPtr particle_cloud_publisher_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_sub_;
 
     std::shared_ptr<tf2_ros::Buffer> buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tfl_;
@@ -50,7 +73,7 @@ private:
     std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan >> scan_filter_;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tfB_;
 
-    GMapping::GridSlamProcessor* gsp_;
+    PosePreservingGridSlamProcessor* gsp_;
     GMapping::RangeSensor* gsp_laser_;
     // The angles in the laser, going from -x to x (adjustment is made to get the laser between
     // symmetrical bounds as that's what gmapping expects)
@@ -64,6 +87,8 @@ private:
     GMapping::OdometrySensor* gsp_odom_;
 
     bool got_first_scan_;
+    bool has_pending_initial_pose_;
+    GMapping::OrientedPoint pending_initial_pose_;
 
     bool got_map_;
     nav_msgs::msg::OccupancyGrid map_;
@@ -84,6 +109,9 @@ private:
     std::string odom_frame_;
 
     void updateMap(sensor_msgs::msg::LaserScan::ConstSharedPtr scan);
+    void initializeGsp(const GMapping::OrientedPoint& initial_pose);
+    void initialPoseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr pose);
+    void publishParticleCloud(const rclcpp::Time& stamp);
     bool getOdomPose(GMapping::OrientedPoint& gmap_pose, const rclcpp::Time& t);
     bool initMapper(sensor_msgs::msg::LaserScan::ConstSharedPtr scan);
     bool addScan(sensor_msgs::msg::LaserScan::ConstSharedPtr scan, GMapping::OrientedPoint& gmap_pose);
