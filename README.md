@@ -17,4 +17,3 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 # To run GMap
 ros2 launch diff_drive_robot_gz_sim ICTE4001_MRobot.launch.py world:=office_world 
 ros2 launch gmapper gmap.launch.py
-ros2 run teleop_twist_keyboard teleop_twist_keyboard
